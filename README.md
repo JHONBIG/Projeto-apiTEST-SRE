@@ -6,3 +6,4 @@ docker build -t devops-api .
 docker tag devops-api:latest 092276958624.dkr.ecr.us-east-1.amazonaws.com/devops-api:latest
 
 docker push 092276958624.dkr.ecr.us-east-1.amazonaws.com/devops-api:latest
+092276958624.dkr.ecr.us-east-1.amazonaws.com/devops-api:latest
