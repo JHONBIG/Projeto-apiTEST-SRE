@@ -7,3 +7,6 @@ docker tag devops-api:latest 092276958624.dkr.ecr.us-east-1.amazonaws.com/devops
 
 docker push 092276958624.dkr.ecr.us-east-1.amazonaws.com/devops-api:latest
 092276958624.dkr.ecr.us-east-1.amazonaws.com/devops-api:latest
+
+
+092276958624.dkr.ecr.us-east-1.amazonaws.com/devops-api:latest
