@@ -1,67 +1,305 @@
-coloque aqui as imformaçoes
-aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 092276958624.dkr.ecr.us-east-1.amazonaws.com
+# devops-api — Ambiente Produtivo com Simulação de Incidente Real
 
+API Node.js containerizada rodando em produção no AWS EKS, com observabilidade completa via Prometheus e Grafana, simulação de incidente, troubleshooting, análise de causa raiz e rollback documentados.
+
+**Criado por:** Jonathan Souza  
+**Área:** Site Reliability Engineering (SRE)
+
+---
+
+## Objetivo do projeto
+
+Demonstrar na prática as responsabilidades de um SRE em um ambiente produtivo real na AWS:
+
+- Provisionar e operar um cluster Kubernetes (EKS) em produção
+- Implementar observabilidade com coleta de métricas e dashboards
+- Simular e responder a um incidente real (CrashLoopBackOff)
+- Executar troubleshooting, análise de causa raiz e rollback
+- Garantir a resiliência e recuperação automática da aplicação
+
+---
+
+## Stack utilizada
+
+| Camada | Tecnologia |
+|---|---|
+| Linguagem | Node.js |
+| Framework | Express.js |
+| Métricas | prom-client |
+| Container | Docker |
+| Registry | AWS ECR |
+| Orquestração | AWS EKS (Kubernetes) |
+| Exposição | Kubernetes LoadBalancer (AWS ELB) |
+| Monitoramento | Prometheus (kube-prometheus-stack) |
+| Dashboards | Grafana |
+| Instalação | Helm |
+
+---
+
+## Arquitetura
+
+```
+                        ┌─────────────────────────────────────────┐
+                        │              AWS EKS Cluster             │
+                        │                                          │
+  Usuário               │   ┌──────────┐      ┌────────────────┐  │
+    │                   │   │  Service │      │   devops-api   │  │
+    └──► AWS ELB ───────┼──►│  (LB)   │─────►│     Pod(s)     │  │
+                        │   └──────────┘      │                │  │
+                        │                     │ GET /          │  │
+                        │   ┌──────────────┐  │ GET /health    │  │
+                        │   │  Prometheus  │◄─│ GET /error     │  │
+                        │   └──────┬───────┘  │ GET /metrics   │  │
+                        │          │          └────────────────┘  │
+                        │   ┌──────▼───────┐                      │
+                        │   │   Grafana    │                      │
+                        │   └──────────────┘                      │
+                        └─────────────────────────────────────────┘
+```
+
+---
+
+## Estrutura do projeto
+
+```
+.
+├── app.js               # Aplicação principal
+├── Dockerfile           # Build da imagem
+├── deployment.yaml      # Deploy no Kubernetes
+├── service.yaml         # Exposição via LoadBalancer
+├── servicemonitor.yaml  # Configuração do Prometheus para raspar métricas
+└── README.md
+```
+
+---
+
+## Endpoints
+
+| Método | Rota      | Descrição                                    |
+|--------|-----------|----------------------------------------------|
+| GET    | /         | Retorna `Api OK!`                            |
+| GET    | /health   | Retorna `healthy` (status 200)               |
+| GET    | /error    | Executa `process.exit(1)` — simula incidente |
+| GET    | /metrics  | Expõe métricas para o Prometheus             |
+
+---
+
+## Como rodar localmente
+
+```bash
+npm install express prom-client
+node app.js
+```
+
+Acesse: `http://localhost:3000`
+
+---
+
+## Como rodar com Docker
+
+```bash
 docker build -t devops-api .
+docker run -p 3000:3000 devops-api
+```
 
-docker tag devops-api:latest 092276958624.dkr.ecr.us-east-1.amazonaws.com/devops-api:latest
+---
 
-docker push 092276958624.dkr.ecr.us-east-1.amazonaws.com/devops-api:latest
-092276958624.dkr.ecr.us-east-1.amazonaws.com/devops-api:latest
+## Deploy na AWS
 
+### 1. Autenticar no ECR
 
-092276958624.dkr.ecr.us-east-1.amazonaws.com/devops-api:latest
+```bash
+aws ecr get-login-password --region <sua-region> | docker login --username AWS --password-stdin <sua-conta>.dkr.ecr.<sua-region>.amazonaws.com
+```
 
+### 2. Build, tag e push da imagem
 
+```bash
+docker build -t devops-api .
+docker tag devops-api:latest <sua-conta>.dkr.ecr.<sua-region>.amazonaws.com/devops-api:latest
+docker push <sua-conta>.dkr.ecr.<sua-region>.amazonaws.com/devops-api:latest
+```
 
+> Atualize o campo `image` no `deployment.yaml` com a URI do seu ECR.
 
+### 3. Aplicar os manifests no EKS
 
+```bash
+kubectl apply -f deployment.yaml
+kubectl apply -f service.yaml
+kubectl apply -f servicemonitor.yaml
+```
 
-Estou analisando um cenário de infraestrutura para um cliente e preciso de uma recomendação completa de arquitetura na AWS com foco em otimização de custos, alta disponibilidade, segurança e boas práticas de DevOps.
+### 4. Verificar o deploy
 
-Cenário atual:
+```bash
+kubectl get pods
+kubectl get svc devops-service
+```
 
-- O cliente possui aproximadamente 10 instâncias rodando em um provedor chamado Ui9 (similar à AWS).
-- Essas instâncias provavelmente hospedam backend, APIs e possivelmente banco de dados.
-- O sistema ainda está em fase inicial, mas irá entrar em produção com clientes reais em breve.
-- Atualmente não há uma estrutura clara de organização, segurança, backup ou escalabilidade.
+### 5. Forçar novo deploy após atualização de imagem
 
-Ambiente atual adicional:
+```bash
+kubectl rollout restart deployment devops-api
+```
 
-- Um frontend já está rodando no AWS Amplify.
-- Outra aplicação frontend em React está rodando na Vercel e deve continuar lá.
+---
 
-Objetivo:
+## Observabilidade
 
-- Migrar as instâncias da Ui9 para a AWS.
-- Estruturar uma arquitetura moderna, segura, escalável e com alta disponibilidade.
-- Garantir que toda a infraestrutura esteja na região do Brasil (sa-east-1).
-- Implementar boas práticas de organização (tags, separação de ambientes, naming).
-- Definir estratégia de backup eficiente (snapshots, banco de dados, retenção).
-- Implementar segurança (IAM, Security Groups, acesso restrito, etc).
-- Sugerir melhorias na arquitetura (uso de serviços gerenciados quando fizer sentido).
+### Instalar Prometheus + Grafana via Helm
 
-Requisitos importantes:
+```bash
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update
+helm install monitoring prometheus-community/kube-prometheus-stack -n monitoring --create-namespace
+```
 
-- Reduzir custos ao máximo sem comprometer a estabilidade.
-- Sugerir uso de serviços como EC2, RDS, S3, Load Balancer, Auto Scaling, etc.
-- Avaliar se vale a pena manter instâncias ou migrar para serviços gerenciados.
-- Considerar alta disponibilidade (multi-AZ, balanceamento de carga).
-- Incluir sugestões de monitoramento e observabilidade.
+### Acessar o Grafana
 
-Saída esperada:
+```bash
+kubectl port-forward svc/monitoring-grafana 3000:80 -n monitoring
+```
 
-- Arquitetura recomendada (explicada de forma clara)
-- Sugestões de serviços AWS a serem utilizados
-- Estratégias de redução de custo
-- Estratégias de alta disponibilidade
-- Estratégias de backup
-- Boas práticas de segurança
-- Sugestão de organização do ambiente
+Acesse: `http://localhost:3000`
 
+```bash
+# Senha do Grafana
+kubectl get secret monitoring-grafana -n monitoring -o jsonpath="{.data.admin-password}" | base64 --decode
+```
 
+### Como o Prometheus coleta as métricas
 
+O `ServiceMonitor` instrui o Prometheus a raspar o endpoint `/metrics` da aplicação a cada 15 segundos. As métricas são expostas via `prom-client` diretamente no processo Node.js.
 
-0:00) Opa Jonathan, como é que tá meu irmão, tudo bem? Meu querido, é o seguinte, eu tenho lá hoje algumas (0:08) instâncias, tá? Na empresa Ui9, não sei se você conhece a Ui9, é uma empresa do Brasil que (0:16) gerencia instâncias no padrão AWS, mais ou menos o mesmo padrão da AWS. E aí eu tenho lá acho que (0:21) umas 10 instâncias rodando, se eu não me engano, e a gente tá 100% com eles. Aí a gente vai entrar (0:29) agora em modo de produção, ou seja, a gente vai começar a comercializar o produto, nós não temos (0:34) clientes na base.
-Então o sistema tá pequeno, o recurso das máquinas pequeno. O que que eu queria, (0:41) tá? O que que eu quero na verdade? Eu quero sentar com você e fazer um orçamento. Aí eu queria te dar (0:46) o acesso, né? A gente fazer uma call, eu te dar o acesso pra você ver minha tela, ou pela call mesmo (0:52) que a gente mostre quantas instâncias, quanto que a gente tá usando de tecnologia.
-Nós dentro da (0:59) AWS já tem uma conta lá que a gente tá usando o AWS Amplify pra um front-end de uma aplicação, e na (1:07) Vercel que a gente tem uma outra aplicação rodando em React, tá? Provavelmente a gente não vai tirar (1:13) da Vercel, porque é um servidor customizado, né? E a AWS não tem um gerenciamento tão rápido (1:20) quanto a Vercel pra questão de aplicações em React. Mas enfim, as demais informações, as demais (1:28) instâncias, eu gostaria de trazer ela pra AWS, né? E estruturar segurança, backup, tudo mais, (1:35) entendeu? Então eu queria conversar com você pra que você me desse uma olhada. Pra você fazer esse (1:40) serviço aí eu vou te cobrar tanto, aí pra eu fazer um serviço de gerenciamento mensal pra você eu vou (1:47) te cobrar tanto, né? Ah, não sei se você consegue fazer uma estimativa com aquela calculadora lá da (1:53) AWS de quanto que nós gastaríamos, entendeu? Toda infraestrutura tem que estar no Brasil, (1:59) nós não queremos usar instâncias norte-americanas.
-Então seria esse o bate-papo que eu precisaria ter (2:06) contigo pra você poder enxergar o nosso cenário e assim montar um orçamento pra gente.
+```
+Pod /metrics  →  Prometheus coleta (a cada 15s)  →  Grafana exibe nos dashboards
+```
+
+### Queries utilizadas no Grafana
+
+| O que monitora | Query |
+|---|---|
+| Total de requisições | `http_requests_total` |
+| Requisições por rota | `sum by (route) (http_requests_total)` |
+| CPU do pod | `rate(container_cpu_usage_seconds_total{pod=~"devops-api.*"}[5m])` |
+| Memória do pod | `container_memory_usage_bytes{pod=~"devops-api.*"}` |
+| Restarts do pod | `kube_pod_container_status_restarts_total{pod=~"devops-api.*"}` |
+
+### Dashboard
+
+Importe o dashboard ID `15661` no Grafana para visualizar CPU, memória, rede e pods do cluster completo.
+
+---
+
+## Simulação de Incidente
+
+### Trigger do incidente
+
+```bash
+curl http://<EXTERNAL-IP>/error
+```
+
+O endpoint `/error` executa `process.exit(1)`, derrubando o processo Node.js dentro do container.
+
+### O que acontece
+
+```
+GET /error
+  → process.exit(1)
+  → container termina com exit code 1
+  → Kubernetes detecta o pod como CrashLoopBackOff
+  → Kubernetes reinicia o pod automaticamente
+  → Pod volta ao estado Running
+```
+
+### Acompanhar o incidente em tempo real
+
+```bash
+# Ver o status do pod mudando
+kubectl get pods -w
+
+# Ver os logs do pod
+kubectl logs -f -l app=devops-api
+
+# Ver detalhes e histórico de eventos do pod
+kubectl describe pod -l app=devops-api
+```
+
+---
+
+## Troubleshooting e Análise de Causa Raiz
+
+### Identificação do problema
+
+```bash
+# 1. Verificar estado dos pods
+kubectl get pods
+
+# Saída esperada durante o incidente:
+# NAME                          READY   STATUS             RESTARTS   AGE
+# devops-api-xxxx               0/1     CrashLoopBackOff   3          5m
+```
+
+```bash
+# 2. Inspecionar os eventos do pod
+kubectl describe pod -l app=devops-api
+
+# Procurar na seção Events:
+# Warning  BackOff   kubelet   Back-off restarting failed container
+```
+
+```bash
+# 3. Verificar os logs do container que falhou
+kubectl logs -l app=devops-api --previous
+```
+
+### Causa raiz
+
+O endpoint `GET /error` executa `process.exit(1)` intencionalmente, simulando uma falha crítica no processo da aplicação. O container encerra com código de saída diferente de zero, o que o Kubernetes interpreta como falha e aciona o mecanismo de restart automático.
+
+### Resolução
+
+O Kubernetes resolve automaticamente via restart policy. Em um cenário real, a resolução envolveria identificar o código que causou o crash, corrigir, gerar nova imagem e fazer rollback ou redeploy.
+
+---
+
+## Rollback
+
+### Verificar histórico de deploys
+
+```bash
+kubectl rollout history deployment devops-api
+```
+
+### Executar rollback para a versão anterior
+
+```bash
+kubectl rollout undo deployment devops-api
+```
+
+### Verificar status do rollback
+
+```bash
+kubectl rollout status deployment devops-api
+```
+
+### Rollback para uma revisão específica
+
+```bash
+kubectl rollout undo deployment devops-api --to-revision=<numero>
+```
+
+---
+
+## Competências SRE demonstradas neste projeto
+
+| Competência | Como foi aplicada |
+|---|---|
+| Operação em EKS | Provisionamento do cluster, deploy de workloads, gestão de pods e services |
+| Observabilidade | Implementação de métricas customizadas com prom-client, ServiceMonitor e dashboards no Grafana |
+| Resposta a incidentes | Simulação de CrashLoopBackOff e acompanhamento em tempo real via kubectl e Grafana |
+| Troubleshooting | Uso de `kubectl describe`, `kubectl logs` e eventos do pod para identificar a causa raiz |
+| Análise de causa raiz | Identificação do exit code e rastreamento do comportamento do processo |
+| Rollback | Uso de `kubectl rollout undo` para reversão controlada de deploy |
+| Resiliência | Validação do mecanismo de restart automático do Kubernetes |

@@ -15,6 +15,6 @@ spec:
     spec:
       containers:
       - name: devops-api
-        image: 092276958624.dkr.ecr.us-east-1.amazonaws.com/devops-api:latest
+        image: <sua-conta>.dkr.ecr.<sua-region>.amazonaws.com/devops-api:latest
         ports:
         - containerPort: 3000
